@@ -1,0 +1,185 @@
+---
+title: "Effects of Storms and Severe Weather Events In Public Health and Economics in the U.S. (1950-2011)"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+Charles A. Gutierrez
+09/25/2020
+
+## Synopsis
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
+
+This analysis report involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database which tracks characteristics of major storms and weather events in the United States, including when and where they occur, as well as estimates of any fatalities, injuries, and property damage.
+
+Analysing the NOAA Storm Database could provide valuable information to answer the following questions about severe weather events.
+
+1. Across the United States, which types of events are most harmful with respect to population health?
+2. Across the United States, which types of events have the greatest economic consequences?
+
+The results could be useful to government or municipal managers be prepared for severe weather events and will need to prioritize resources for different types of events.
+
+
+## Data Processing
+The data was downloaded from the following web site:
+
+[Storm Data [47Mb]](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2)
+
+There is also some documentation of the database available. It provides how some of the variables are constructed and defined.
+
+* National Weather Service [Storm Data Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+* National Climatic Data Center Storm Events [FAQ](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf)
+
+The events in the database start in the year 1950 and end in November 2011. In the earlier years of the database there are generally fewer events recorded, most likely due to a lack of good records. More recent years should be considered more complete.
+
+### Downloading and Reading the data
+```{r echo=TRUE}
+
+#Uploading libraries
+library(dplyr)
+library(ggplot2)
+library(lattice)
+
+if (!file.exists("StormData.csv.bz2")){
+URLfile <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(URLfile, "StormData.csv.bz2")
+}
+
+data <- read.csv("StormData.csv.bz2", stringsAsFactors=F)
+
+#After dowloading the data we will save memory unlinking the dataset
+unlink("StormData.csv.bz2")
+
+```
+We will review how many observations and variables does the dataset has.
+```{r}
+dim(data)
+names(data)
+```
+For our analysis we will consider the following: Event type, Fatalities, Injures, property and crop damage and property and crop damage exponent.  
+
+We will make a subset with these variables.
+
+
+```{r}
+
+newdata <- data[,c("EVTYPE","FATALITIES","INJURIES","PROPDMG","PROPDMGEXP","CROPDMG","CROPDMGEXP")]
+
+#we review missing data
+summary(newdata)
+str(newdata)
+
+```
+We do not see missing values and we will proced to calculate the total casualties by event type.
+
+```{r}
+casualties <- aggregate(INJURIES+FATALITIES~EVTYPE, newdata, sum)
+#we change a proper name of the total of casualties
+names(casualties)[2]<-"Totalcasualties"
+
+```
+We will consider the top 5 harmful events according to the highest number of casualties
+```{r}
+top5_casualties<-arrange(casualties,desc(casualties$Totalcasualties))[1:5,]
+
+```
+Next, let's proceede calculating the damage to properties for each event by converting the given property and crop damage values to their right values, according to the documentation we need to multiply each property and crop value by their respective exponent variable.
+
+```{r cache=TRUE}
+#We identity each unique values
+unique(newdata$PROPDMGEXP)
+unique(newdata$CROPDMGEXP)
+
+for (i in 1:length(newdata$PROPDMGEXP)){
+    
+    if(newdata$PROPDMGEXP[i]=='k'|newdata$PROPDMGEXP[i]=="K"){
+        newdata$PROPDMG[i]=newdata$PROPDMG[i]*10^3}
+    
+    if(newdata$PROPDMGEXP[i]=='B'){
+        newdata$PROPDMG[i]=newdata$PROPDMG[i]*10^9}
+    
+    if(newdata$PROPDMGEXP[i]=='m'|newdata$PROPDMGEXP[i]=='M'){
+        newdata$PROPDMG[i]=newdata$PROPDMG[i]*10^6}
+    
+    if(newdata$PROPDMGEXP[i]=='h'|newdata$PROPDMGEXP[i]=='H'){
+        newdata$PROPDMG[i]=newdata$PROPDMG[i]*10^2}
+    
+    if(is.numeric(newdata$PROPDMGEXP[i])){
+        newdata$PROPDMG[i]=newdata$PROPDMG[i]*10^newdata$PROPDMGEXP[i]}
+    
+
+}
+
+
+for (i in 1:length(newdata$CROPDMGEXP)){
+
+    if(newdata$CROPDMGEXP[i]=='k'|newdata$CROPDMGEXP[i]=="K"){
+        newdata$CROPDMG[i]=newdata$CROPDMG[i]*10^3}
+    
+    if(newdata$CROPDMGEXP[i]=='B'){
+        newdata$CROPDMG[i]=newdata$CROPDMG[i]*10^9}
+    
+    if(newdata$CROPDMGEXP[i]=='m'|newdata$CROPDMGEXP[i]=='M'){
+        newdata$CROPDMG[i]=newdata$CROPDMG[i]*10^6}
+    
+    if(newdata$CROPDMGEXP[i]=='h'|newdata$CROPDMGEXP[i]=='H'){
+        newdata$CROPDMG[i]=newdata$CROPDMG[i]*10^2}
+    
+    if(is.numeric(newdata$CROPDMGEXP[i])){
+        newdata$CROPDMG[i]=newdata$CROPDMG[i]*10^newdata$CROPDMGEXP[i]}
+    
+}
+
+```
+After updating the damage value, we will calculate the total property and crop damage by event type.
+
+```{r}
+damages<-aggregate(PROPDMG+CROPDMG~EVTYPE,newdata,sum)
+
+#we update de column name
+
+names(damages)[2]<-"Totaldamages"
+
+```
+Now, we will consider the top 5 harmful events with the highest amount in damages to property and crops.
+
+```{r}
+top5_damages<- arrange(damages, desc(damages$Totaldamages))[1:5,]
+```
+
+## Results
+Finally, we will see the results of calculation for the total of casualties and damages by the top 5 harmful events in the U.S. since 1950 to 2011.
+
+```{r}
+colnames(top5_casualties)<-c('EVTYPE','TotalCasualties')
+ggplot(top5_casualties,aes(x=reorder(EVTYPE,TotalCasualties),y=TotalCasualties,fill=TotalCasualties))+
+    geom_bar(stat='identity', colour='white')+ggtitle('Top 5 Harmful Events in Casualties to Public Health in U.S. (1950-2011)')+
+    xlab('Type of Event')+coord_flip()+ylab('Total Casualties')
+
+```
+
+And the results of calculation for the total of damages by the top 5 harmful events in the U.S. since 1950 to 2011.
+
+```{r}
+colnames(top5_damages)<-c('EVTYPE','TotalDamages')
+ggplot(top5_damages,aes(x=reorder(EVTYPE,TotalDamages),y=TotalDamages,fill=TotalDamages))+
+    geom_bar(stat='identity', colour='white')+ggtitle('Top 5 Harmful Events in Damages to Economics in U.S. (1950-2011)')+
+    xlab('Type of Event')+coord_flip()+ylab('Total Damages')
+
+```
+
+To conclude we can see that the most harmful event in U.S. from (1950-2011) in terms of casualties has been caused by Tornados, and in terms of economic damages has been caused by Floods and Hurricanes.
+
+```{r}
+
+```
+
+### Notes
+
+```{r}
+sessionInfo()
+
+```
+
